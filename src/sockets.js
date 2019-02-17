@@ -122,7 +122,6 @@ exports.init = app => {
 
         socket.on(`build_construct`, data => {
             try {
-                console.log({data})
                 const {
                     construct_key,
                     product_key,
@@ -177,8 +176,9 @@ exports.init = app => {
                             count      : 2,
                             build_time : 1000,
                             cost       : {
-                                food: 12,
-                                wood: 1
+                                food  : 50,
+                                wood  : 20,
+                                pelts : 10,
                             },
                             products   : {
                                 hunters: {
@@ -228,7 +228,7 @@ exports.init = app => {
                     },
                     resources: {
                         food      : {count: 47},
-                        wood      : {count: 5},
+                        wood      : {count: 15},
                         pelts     : {count: 4},
                         leather   : {count: 2},
                     }
@@ -284,7 +284,7 @@ const update = () => {
                             const gainer_item     = getEmpireFacetItem(empire, product_key)
                             const {count}         = products[product_key]
                             product.last_product  = now
-                            gainer_item.count     += count
+                            gainer_item.count     += count * (empire_facet_key === `citizens` ? producer.count : 1)
 
                             socket.emit(`product`, {
                                 product_key,
