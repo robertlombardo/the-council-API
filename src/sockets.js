@@ -122,7 +122,11 @@ exports.init = app => {
 
         socket.on(`build_construct`, data => {
             try {
-                const {construct_key}  = data
+                console.log({data})
+                const {
+                    construct_key,
+                    product_key,
+                }                      = data
                 const {empire}         = socket.player
                 const construct        = socket.player.empire.constructs[construct_key]
                 const {cost}           = construct
@@ -142,7 +146,8 @@ exports.init = app => {
 
                 // exact the costs & kick off construct build
                 for (let cost_key in cost) cost_facet_items[cost_key].count -= cost[cost_key]
-                construct.build_start_time = new Date().getTime()
+                construct.build_start_time  = new Date().getTime()
+                construct.build_product_key = product_key 
 
                 return socket.emit(`construct_build_started`, {construct_key, player: socket.player})
 
@@ -169,62 +174,55 @@ exports.init = app => {
                 empire          : {
                     constructs: {
                         camps     : {
-                            count        : 1,
-                            cost         : {
+                            count      : 2,
+                            build_time : 1000,
+                            cost       : {
                                 food: 12,
                                 wood: 1
                             },
-                            build_time   : 1000,
-                            last_update  : now,
-                            last_product : now,
-                            interval     : 20 * 1000,
-                            products     : {
+                            products   : {
                                 hunters: {
-                                    weight : 1,
-                                    count  : 1,
+                                    count        : 1,
+                                    last_product : now,
+                                    interval     : 30 * 1000,
                                 },
                                 gatherers: {
-                                    weight : 2,
-                                    count  : 1,
-                                } 
+                                    count        : 1,
+                                    last_product : now,
+                                    interval     : 20 * 1000,
+                                },
                             }
                         },
                     },
                     citizens: {
                         hunters   : {
-                            count       : 1,
-                            last_update : now,
-                            last_product: now,
-                            interval    : 11 * 1000,
-                            products    : {
+                            count    : 1,
+                            products : {
                                 food: {
-                                    weight : 3,
-                                    count  : 2,
+                                    count       : 1,                                    
+                                    last_product: now,
+                                    interval    : 11 * 1000,
                                 },
                                 pelts: {
-                                    weight : 1,
-                                    count  : 1,
+                                    count       : 1,                                    
+                                    last_product: now,
+                                    interval    : 17 * 1000,
                                 },
-                                leather: {
-                                    weight : 1,
-                                    count  : 1
-                                }
                             }
                         },
                         gatherers : {
-                            count        : 3,
-                            last_update  : now,
-                            last_product : now,
-                            interval     : 6 * 1000,
-                            products     : {
+                            count    : 3,
+                            products : {
                                 food: {
-                                    weight : 1,
-                                    count  : 1,
+                                    count        : 1,
+                                    last_product : now,
+                                    interval     : 7 * 1000,
                                 },
                                 wood: {
-                                    weight : 1,
-                                    count  : 1,
-                                } 
+                                    count        : 1,
+                                    last_product : now,
+                                    interval     : 6 * 1000,
+                                },
                             }
                         },
                     },
@@ -275,35 +273,38 @@ const update = () => {
                 facet_item.last_update = now
 
                 if (facet_item.products) {
-                    const producer = facet_item
+                    const producer   = facet_item
+                    const {products} = producer
 
-                    if (now - producer.last_product >= producer.interval) { // producer interval is complete
-                        // calculate product winner by weight
-                        const product_candidates = []
-                        for (let product_key in producer.products) {
-                            for (let i = 0; i < producer.products[product_key].weight; ++i) product_candidates.push(product_key)
+                    for (let product_key in products) {
+                        const product = products[product_key]
+
+                        if (now - product.last_product >= product.interval) { // producer interval is complete
+                            // add the product & restart interval
+                            const gainer_item     = getEmpireFacetItem(empire, product_key)
+                            const {count}         = products[product_key]
+                            product.last_product  = now
+                            gainer_item.count     += count
+
+                            socket.emit(`product`, {
+                                product_key,
+                                count,
+                                player,
+                            })
                         }
-                        const product_winner_key = product_candidates[Math.floor(Math.random() * product_candidates.length)]
-
-                        // add the product & restart interval
-                        const gainer_item     = getEmpireFacetItem(empire, product_winner_key)
-                        const {count}         = producer.products[product_winner_key]
-                        producer.last_product = now
-                        gainer_item.count     += count
-
-                        socket.emit(`product`, {
-                            product_key: product_winner_key,
-                            count,
-                            player,
-                        })
                     }
                 }
 
                 if (empire_facet_key === `constructs`) {
-                    if (facet_item.build_start_time && now - facet_item.build_start_time >= facet_item.build_time) {
-                        facet_item.count++
-                        delete facet_item.build_start_time
+                    if (facet_item.build_start_time && now - facet_item.build_start_time >= facet_item.build_time) { // build complete
                         // TODO - increment interval?
+
+                        // increment the facet item count & product count, and stop building
+                        facet_item.count++
+                        facet_item.products[facet_item.build_product_key].count++
+                        delete facet_item.build_product_key
+                        delete facet_item.build_start_time
+
                         socket.emit(`construct_build_complete`, {
                             facet_item_key,
                             player
